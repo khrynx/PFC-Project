@@ -35,6 +35,17 @@ import {
 } from './services/userService.js'
 
 import type {
+import { createUser, listPublicUsers, searchUsers } from './services/userService.js'
+import {
+  getProgramOrThrow,
+  getUserProgression,
+  listPrograms,
+  removeCourseStatus,
+  setCourseStatus,
+  setUserProgram
+} from './services/progressionService.js'
+import type {
+  CourseStatus,
   RecommendationRequest,
   SharedRecommendationRequest
 } from './models.js'
@@ -94,7 +105,9 @@ function sendDomainError(
     not_authorised: 403,
     not_friends: 404,
     request_not_found: 404,
-    user_not_found: 404
+    user_not_found: 404,
+    program_not_found: 404,
+    no_program_selected: 400
   }
 
   res
@@ -731,6 +744,75 @@ router.post(
         friendIds
       )
     )
+  })
+)
+
+router.get('/programs', (_req, res) => {
+  res.json(listPrograms())
+})
+
+router.get('/programs/:code', (req, res) => {
+  try {
+    res.json(getProgramOrThrow(req.params.code))
+  } catch (error) {
+    sendDomainError(res, error)
+  }
+})
+
+router.get(
+  '/users/:id/progression',
+  asyncRoute(async (req, res) => {
+    try {
+      res.json(await getUserProgression(req.params.id))
+    } catch (error) {
+      sendDomainError(res, error)
+    }
+  })
+)
+
+router.post(
+  '/users/:id/program',
+  asyncRoute(async (req, res) => {
+    const programCode = String(req.body?.programCode ?? '').trim()
+    if (!programCode) {
+      res.status(400).json({ error: 'invalid_program_code' })
+      return
+    }
+
+    try {
+      res.json(await setUserProgram(req.params.id, programCode))
+    } catch (error) {
+      sendDomainError(res, error)
+    }
+  })
+)
+
+router.post(
+  '/users/:id/courses',
+  asyncRoute(async (req, res) => {
+    const courseCode = String(req.body?.courseCode ?? '').trim()
+    const status = String(req.body?.status ?? '') as CourseStatus
+    if (!courseCode || !['completed', 'planned'].includes(status)) {
+      res.status(400).json({ error: 'invalid_course_status_request' })
+      return
+    }
+
+    try {
+      res.status(201).json(await setCourseStatus(req.params.id, courseCode, status))
+    } catch (error) {
+      sendDomainError(res, error)
+    }
+  })
+)
+
+router.delete(
+  '/users/:id/courses/:courseCode',
+  asyncRoute(async (req, res) => {
+    try {
+      res.json(await removeCourseStatus(req.params.id, req.params.courseCode))
+    } catch (error) {
+      sendDomainError(res, error)
+    }
   })
 )
 

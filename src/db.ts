@@ -3,12 +3,14 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { degreePlans } from './data/degreePlans.js'
 import type { AuthCredential, FriendRequest, Friendship, UserProfile } from './models.js'
+import type { CourseProgressRecord, FriendRequest, Friendship, UserProfile } from './models.js'
 
 const DATA_DIR = path.resolve(process.cwd(), process.env.DB_DIR ?? 'db')
 const USERS_FILE = path.join(DATA_DIR, 'users.json')
 const REQUESTS_FILE = path.join(DATA_DIR, 'friend_requests.json')
 const FRIENDS_FILE = path.join(DATA_DIR, 'friendships.json')
 const CREDENTIALS_FILE = path.join(DATA_DIR, 'credentials.json')
+const COURSE_PROGRESS_FILE = path.join(DATA_DIR, 'course_progress.json')
 
 let mutationQueue: Promise<void> = Promise.resolve()
 
@@ -38,6 +40,8 @@ function createDemoData() {
       degreeCourseIds: compSci.courseIds,
       plannedCourses: { '1': ['c2', 'c5'], '2': ['c1', 'c3'], '3': ['c4', 'c6'] },
       createdAt: now
+      createdAt: now,
+      programCode: 'computer-science'
     },
     {
       id: 'u2',
@@ -48,6 +52,8 @@ function createDemoData() {
       degreeCourseIds: commerce.courseIds,
       plannedCourses: { '1': ['c2'], '2': ['c3'], '3': ['c6'] },
       createdAt: now
+      createdAt: now,
+      programCode: 'software-engineering'
     },
     {
       id: 'u3',
@@ -58,6 +64,8 @@ function createDemoData() {
       degreeCourseIds: economics.courseIds,
       plannedCourses: { '1': ['c5'], '2': ['c1', 'c3'], '3': ['c4'] },
       createdAt: now
+      createdAt: now,
+      programCode: 'actuarial-studies'
     },
     {
       id: 'u4',
@@ -68,6 +76,8 @@ function createDemoData() {
       degreeCourseIds: actuarial.courseIds,
       plannedCourses: { '1': ['c2'], '2': ['c1'], '3': ['c4', 'c6'] },
       createdAt: now
+      createdAt: now,
+      programCode: 'commerce-finance'
     }
   ]
   const requests: FriendRequest[] = [
@@ -87,7 +97,22 @@ function createDemoData() {
       createdAt: now
     }
   ]
-  return { users, requests, friendships }
+  const courseProgress: CourseProgressRecord[] = [
+    { userId: 'u1', courseCode: 'COMP1511', status: 'completed' },
+    { userId: 'u1', courseCode: 'COMP1521', status: 'completed' },
+    { userId: 'u1', courseCode: 'MATH1081', status: 'completed' },
+    { userId: 'u1', courseCode: 'COMP1531', status: 'planned' },
+    { userId: 'u2', courseCode: 'COMP1511', status: 'completed' },
+    { userId: 'u2', courseCode: 'COMP1521', status: 'completed' },
+    { userId: 'u2', courseCode: 'COMP1531', status: 'completed' },
+    { userId: 'u2', courseCode: 'DESN1000', status: 'completed' },
+    { userId: 'u3', courseCode: 'ACTL1101', status: 'completed' },
+    { userId: 'u3', courseCode: 'COMM1170', status: 'completed' },
+    { userId: 'u3', courseCode: 'MATH1151', status: 'planned' },
+    { userId: 'u4', courseCode: 'COMM1100', status: 'completed' },
+    { userId: 'u4', courseCode: 'COMM1110', status: 'completed' }
+  ]
+  return { users, requests, friendships, courseProgress }
 }
 
 async function ensureDir() {
@@ -137,6 +162,11 @@ export async function migrate() {
     readRequests(),
     readFriendships(),
     readCredentials()
+  const [users, requests, friendships, courseProgress] = await Promise.all([
+    readUsers(),
+    readRequests(),
+    readFriendships(),
+    readCourseProgress()
   ])
 
   await Promise.all([
@@ -144,6 +174,7 @@ export async function migrate() {
     writeRequests(requests),
     writeFriendships(friendships),
     writeCredentials(credentials)
+    writeCourseProgress(courseProgress)
   ])
 }
 
@@ -169,6 +200,11 @@ export async function seedIfEmpty() {
     if (friendships.length === 0) {
       await writeFriendships(createDemoData().friendships)
     }
+
+    const courseProgress = await readCourseProgress()
+    if (courseProgress.length === 0) {
+      await writeCourseProgress(createDemoData().courseProgress)
+    }
   })
 }
 
@@ -180,6 +216,7 @@ export async function resetDemoData() {
       writeRequests(demoData.requests),
       writeFriendships(demoData.friendships),
       writeCredentials([])
+      writeCourseProgress(demoData.courseProgress)
     ])
   })
 }
@@ -218,6 +255,13 @@ export async function readCredentials(): Promise<AuthCredential[]> {
 
 export async function writeCredentials(credentials: AuthCredential[]) {
   await writeJsonAtomic(CREDENTIALS_FILE, credentials)
+export async function readCourseProgress(): Promise<CourseProgressRecord[]> {
+  await ensureDir()
+  return readJsonArray<CourseProgressRecord>(COURSE_PROGRESS_FILE)
+}
+
+export async function writeCourseProgress(records: CourseProgressRecord[]) {
+  await writeJsonAtomic(COURSE_PROGRESS_FILE, records)
 }
 
 if (['migrate', 'seed', 'reset-demo'].includes(process.argv[2] ?? '')) {
